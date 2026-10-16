@@ -14,3 +14,7 @@ python-dateutil==2.9.0.post0
 rocketcea==1.2.3
 scipy==1.17.1
 six==1.17.0
+PyQt6==6.9.1
+PyQt6-Qt6==6.9.2
+PyYAML==6.0.3
+cantera==3.2.0

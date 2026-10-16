@@ -396,10 +396,40 @@ class Transport_obj:
         geom = self.geom
 
         _, gamma = self.Props_obj.C.get_Throat_MolWt_gamma(self.Pc,self.MR,self.eps)
-        
+
         mach = MachArea(z,R,self.geom,gamma)
 
         return mach
+
+    def MachFunction(self,R):
+        '''
+        Same result as Mach(z,R), but queries CEA for the throat gamma once and
+        memoises each z so repeated calls in a snapshot don't re-solve area-Mach.
+        '''
+
+        _, gamma = self.Props_obj.C.get_Throat_MolWt_gamma(self.Pc,self.MR,self.eps)
+
+        cache = {}
+
+        def MachF(z):
+            if z not in cache:
+                cache[z] = MachArea(z,R,self.geom,gamma)
+            return cache[z]
+
+        return MachF
+
+    def ChamberComposition(self):
+        '''
+        Chamber mole fractions of H2O and CO2 and the chamber molecular weight (kg/kmol).
+        '''
+
+        _, moleFracD = self.Props_obj.C.get_SpeciesMoleFractions(Pc=self.Pc, MR=self.MR, eps=self.eps)
+
+        fracs = {k.lstrip('*'): v[1] for k, v in moleFracD.items()}  # index 1 = combustion end
+
+        MolWt, _ = self.Props_obj.C.get_Chamber_MolWt_gamma(self.Pc,self.MR,self.eps)
+
+        return fracs.get('H2O', 0.0), fracs.get('CO2', 0.0), MolWt
 
 
 

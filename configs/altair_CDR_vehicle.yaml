@@ -1,0 +1,59 @@
+kind: catnap-vehicle
+version: 1
+name: Altair
+propellants:
+  oxidizer_cea: N2O
+  fuel_cea: ETHANOL
+  oxidizer_coolprop: N2O
+  fuel_coolprop: ETHANOL
+contour:
+  nozzle_length_in: 4.5901
+  arc1_length_in: 0.9713
+  arc2_length_in: 2.0488
+  chamber_length_in: 5.0123
+  exit_radius_in: 2.2549
+  arc1_radius_in: 1.5374
+  arc2_radius_in: 3.2429
+  divergence_angle_deg: 15.0
+  throat_curvature_radius_mm: 24.5
+injector:
+  ox_holes: 25
+  ox_diameter_mm: 2.533
+  ox_cd: 0.55
+  fuel_holes: 20
+  fuel_diameter_mm: 1.24
+  fuel_cd: 0.65
+  film_holes: 20
+  film_diameter_mm: 0.48
+  film_cd: 0.65
+valves:
+  ox_cv: 24.0
+  fuel_cv: 12.0
+lines:
+  ox_dash: 16
+  ox_wall_in: 0.049
+  ox_length_in: 24.0
+  ox_minor_loss_K: 1.6
+  fuel_dash: 8
+  fuel_wall_in: 0.035
+  fuel_length_in: 30.0
+  fuel_minor_loss_K: 1.6
+  roughness_um: 1.5
+regen:
+  wall_thickness_mm: 1.2
+  channel_height_mm: 1.5
+  min_channel_width_mm: 1.3208
+  channels: 90
+  wall_conductivity_W_mK: 237.0
+  roughness_um: 15.0
+  generatrix_angle_deg: 35.0
+  gas_radiation: true
+  wall_emissivity: 0.8
+  gas_emissivity: null
+film:
+  enabled: true
+  mixing_coefficient: 0.001
+  near_wall_mass_fraction: 0.1
+  near_wall_OF: null
+tbc:
+  pdms_mass_fraction_pct: 2.5

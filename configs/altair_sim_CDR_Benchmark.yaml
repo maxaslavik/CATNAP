@@ -1,0 +1,32 @@
+kind: catnap-sim
+version: 1
+time:
+  duration_s: 25.0
+  steps: 150
+tank:
+  propellant_mass_kg: 54.0
+  temperature_K: 290.0
+  vapor_quality: 0.01
+  piston_dp_psi: 15.0
+environment:
+  ambient_pressure_bar: 0.810852
+regen:
+  snapshot_times_s:
+  - 0.5
+  - 3.4167
+  - 6.3333
+  - 9.25
+  - 12.1667
+  - 15.0833
+  - 18.0
+  thermal_model: true
+  coolant_inlet_temperature_K: 290.0
+  axial_points: 80
+solver:
+  chamber_pressure_guess_psi: 340.0
+  film_coupling_tol_K: 0.5
+  film_coupling_max_iter: 15
+output:
+  plots: true
+  dashboard: true
+  csv: true

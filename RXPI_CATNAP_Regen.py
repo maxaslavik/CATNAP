@@ -47,72 +47,118 @@ def RegenGeom(lfmin,wcmin,Rthroat,numchannels,twall,R):
 
 
 
-def DittusB(z,mdotchannel,T1,P1,Regen_obj):
-    
-    channelheight = Regen_obj.channelheight
-    
-    channelwidth = Regen_obj.channelwidth
-    
+RE_LAMINAR = 2300.0
+RE_TURBULENT = 1.0e4
+
+
+def shah_london_H1(aspect):
+    '''
+    Fully developed laminar Nu in a rectangular duct, H1 boundary condition (axially uniform
+    heat flux, peripherally uniform wall temperature, i.e. a high-conductivity wall), Shah &
+    London (1978). aspect = short/long side: 8.235 for parallel plates, 3.61 for a square.
+    '''
+
+    a = aspect
+    return 8.235*(1 - 2.0421*a + 3.0853*a**2 - 2.4765*a**3 + 1.0578*a**4 - 0.1861*a**5)
+
+
+def nusselt_laminar(Re, Pr, Dh, x, aspect):
+    '''
+    Local laminar Nu at distance x from the channel inlet, constant heat flux, thermally and
+    hydrodynamically developing (VDI Heat Atlas G1, Gnielinski):
+
+        Nu_x = [Nu_1^3 + 1 + (Nu_2 - 1)^3 + Nu_3^3]^(1/3)
+        Nu_2 = 1.302 (Re Pr Dh/x)^(1/3)        thermal entry
+        Nu_3 = 0.462 Pr^(1/3) (Re Dh/x)^(1/2)  simultaneous hydrodynamic entry
+
+    The fully developed limit Nu_1 is Shah & London's rectangular-duct H1 value in place of
+    the circular-tube 4.364.
+    '''
+
+    gz = Dh/max(x, 1e-3*Dh)
+    Nu2 = 1.302*(Re*Pr*gz)**(1/3)
+    Nu3 = 0.462*Pr**(1/3)*(Re*gz)**0.5
+    return (shah_london_H1(aspect)**3 + 1 + (Nu2 - 1)**3 + Nu3**3)**(1/3)
+
+
+def channel_nusselt(Re, Pr, Dh, x, aspect, nu_turbulent):
+    '''
+    Coolant Nu across laminar, transitional and turbulent flow (VDI Heat Atlas G1):
+
+        Re <= 2300          laminar, nusselt_laminar(Re)
+        2300 < Re < 1e4     (1 - g) Nu_lam(2300) + g Nu_turb(1e4),  g = (Re - 2300)/(1e4 - 2300)
+        Re >= 1e4           nu_turbulent(Re)
+
+    nu_turbulent is the channel's turbulent correlation (Dittus-Boelter or Gnielinski). VDI
+    anchors the interpolation on Gnielinski at Re = 1e4; anchoring on the correlation used
+    above 1e4 keeps h continuous there.
+    '''
+
+    if Re >= RE_TURBULENT:
+        return nu_turbulent(Re)
+    if Re <= RE_LAMINAR:
+        return nusselt_laminar(Re, Pr, Dh, x, aspect)
+    g = (Re - RE_LAMINAR)/(RE_TURBULENT - RE_LAMINAR)
+    return (1 - g)*nusselt_laminar(RE_LAMINAR, Pr, Dh, x, aspect) + g*nu_turbulent(RE_TURBULENT)
+
+
+def _coolant_state(z,mdotchannel,T1,P1,Regen_obj):
+    '''
+    Channel Dh, Re, Pr, k, aspect ratio and the distance from the coolant inlet (the nozzle
+    exit, z = 0) along the channel to the middle of the cell at z.
+    '''
+
     fluid = Regen_obj.coolant
-    
-    channelheight1 = channelheight(z)
-    
-    channelwidth1 = channelwidth(z)
-    
+
+    channelheight1 = Regen_obj.channelheight(z)
+
+    channelwidth1 = Regen_obj.channelwidth(z)
+
     mu = CP.PropsSI('viscosity','T',T1,'P',P1,fluid)
-    
+
     Dh = 4*(channelwidth1*channelheight1)/(2*channelwidth1 + 2*channelheight1)
-    
+
     Reynolds = Dh*mdotchannel/(channelheight1*channelwidth1*mu)
-    
-    if Reynolds < 2300:
-        raise ValueError('Laminar flow probable!, Re < 2300')
-        
+
     Prantl = CP.PropsSI('Prandtl','T',T1,'P',P1,fluid)
-    
+
     k_fluid = CP.PropsSI('conductivity','T',T1,'P',P1,fluid)
-    
-    Nusselt = 0.023*(Reynolds**0.8)*(Prantl**0.4)
-    
+
+    aspect = min(channelwidth1, channelheight1)/max(channelwidth1, channelheight1)
+
+    x = z/np.cos(Regen_obj.genrad) + 0.5*Regen_obj.dz
+
+    return Dh, Reynolds, Prantl, k_fluid, aspect, x
+
+
+def DittusB(z,mdotchannel,T1,P1,Regen_obj):
+
+    Dh, Reynolds, Prantl, k_fluid, aspect, x = _coolant_state(z, mdotchannel, T1, P1, Regen_obj)
+
+    def turbulent(Re):
+        return 0.023*(Re**0.8)*(Prantl**0.4)
+
+    Nusselt = channel_nusselt(Reynolds, Prantl, Dh, x, aspect, turbulent)
+
     hcoolant = Nusselt*k_fluid/Dh
-    
+
     return hcoolant
 
 
 def Gneilinski(z,mdotchannel,Regen_obj,T1,P1):
-    
-    channelheight = Regen_obj.channelheight
-    
-    channelwidth = Regen_obj.channelwidth
-    
-    fluid = Regen_obj.coolant
-    
+
+    Dh, Reynolds, Prantl, k_fluid, aspect, x = _coolant_state(z, mdotchannel, T1, P1, Regen_obj)
+
     epsilon_rough = Regen_obj.epsilon_rough
-    
-    channelheight1 = channelheight(z)
-    
-    channelwidth1 = channelwidth(z)
-    
-    mu = CP.PropsSI('viscosity','T',T1,'P',P1,fluid)
-    
-    Dh = 4*(channelwidth1*channelheight1)/(2*channelwidth1 + 2*channelheight1)
-    
-    Reynolds = Dh*mdotchannel/(channelheight1*channelwidth1*mu)
-    
-    if Reynolds < 2300:
-        raise ValueError('Laminar flow probable!, Re < 2300')
-    
-    Prantl = CP.PropsSI('Prandtl','T',T1,'P',P1,fluid)
-    
-    k_fluid = CP.PropsSI('conductivity','T',T1,'P',P1,fluid)
-    
-    f = 0.25*((np.log10(epsilon_rough/(3.7*Dh) + 5.74/(Reynolds**0.9)))**(-2))
-    
-    Nusselt = ((f/8)*(Reynolds - 1000)*Prantl)/(1 + 12.7*((f/8)**0.5)*(Prantl**(2/3) - 1))
-    
-    
+
+    def turbulent(Re):
+        f = 0.25*((np.log10(epsilon_rough/(3.7*Dh) + 5.74/(Re**0.9)))**(-2))
+        return ((f/8)*(Re - 1000)*Prantl)/(1 + 12.7*((f/8)**0.5)*(Prantl**(2/3) - 1))
+
+    Nusselt = channel_nusselt(Reynolds, Prantl, Dh, x, aspect, turbulent)
+
     hcoolant = Nusselt*k_fluid/Dh
-    
+
     return hcoolant
     
 
@@ -276,10 +322,15 @@ def DeltaP(z,mdotchannel,T1,P1,Regen_obj):
     Reynolds = Dh*mdotchannel/(channelheight1*channelwidth1*mu)
     
     if Reynolds < 2300:
-        raise ValueError('Laminar flow probable!, Re < 2300')
-    
-    f = 0.25*((np.log10(epsilon_rough/(3.7*Dh) + 5.74/(Reynolds**0.9)))**(-2))
-    
+        # Fully developed laminar flow in a rectangular duct, Shah & London (Darcy f*Re;
+        # 64 for a circle, 56.9 for a square). Only the heat transfer correlations need
+        # turbulent flow, so the pressure drop no longer stops the run here.
+        a = min(channelwidth1, channelheight1)/max(channelwidth1, channelheight1)
+        fRe = 96*(1 - 1.3553*a + 1.9467*a**2 - 1.7012*a**3 + 0.9564*a**4 - 0.2537*a**5)
+        f = fRe/Reynolds
+    else:
+        f = 0.25*((np.log10(epsilon_rough/(3.7*Dh) + 5.74/(Reynolds**0.9)))**(-2))
+
     rho = CP.PropsSI('D','T',T1,'P',P1,fluid)
     
     u = mdotchannel/(rho*channelwidth1*channelheight1)
@@ -298,17 +349,32 @@ def DeltaP(z,mdotchannel,T1,P1,Regen_obj):
 
 
 
-def RectStress(z,twall,Q,Rwall):
+TBC_FLUX_REDUCTION_PER_PCT = 8.0   # % wall heat flux removed per 1 % PDMS fuel mass fraction (conservative)
 
+
+def tbc_flux_scale(pdms_mass_pct):
+    '''
+    Wall heat flux multiplier for a PDMS-doped fuel (thermal barrier coating).
+    Linear: each 1 % of fuel mass fraction removes TBC_FLUX_REDUCTION_PER_PCT % of the
+    flux computed without the TBC. Floored at zero so it can never reverse the flux.
+    Applied to the reported flux only, see SOLVE_REGEN.
+    '''
+
+    return max(0.0, 1.0 - TBC_FLUX_REDUCTION_PER_PCT*pdms_mass_pct/100.0)
+
+
+def RectStress(z,twall,Q,Rwall):
+    #TODO: implement later, use thermal stress eq from heister or something
     pass
 
 
 
 
 class Regen_obj:
-    def __init__(self, twall, lfmin, wcmin,R, Rthroat, throat_radcurv, numchannels, coolant, k_chamber, epsilon_rough,numpts_z,enginelength,genangle):
+    def __init__(self, twall, lfmin, wcmin,R, Rthroat, throat_radcurv, numchannels, coolant, k_chamber, epsilon_rough,numpts_z,enginelength,genangle,tbc_scale=1.0):
 
         self.genrad = (genangle)*pi/180
+        self.tbc_scale = tbc_scale   # wall heat flux multiplier, see tbc_flux_scale()
         
         self.twall = twall
         self.R = R #function R(z)
@@ -408,24 +474,103 @@ class Regen_obj:
     def dP_channel_Approx(self,Tc_init,Pcool_init,mdot_coolant):
 
         #NOTE: Do not use for normal regen circuit calculation, this loop approximates regen channel loss
-        # without accounting for small changes in coolant properties due to temperature. Meant to be used 
-        # outside of snapshot loop
+        # without accounting for small changes in coolant properties due to temperature. Meant to be used
+        # outside of snapshot loop. Properties at the inlet pressure (within 1e-4 of re-evaluating
+        # them at the local pressure at every node).
 
-        P1 = Pcool_init
-        
-        for i,z1 in enumerate(self.z_array):
-            mdotchannel = mdot_coolant / self.numchannels
+        rho = CP.PropsSI('D','T',Tc_init,'P',Pcool_init,self.coolant)
+        mu = CP.PropsSI('viscosity','T',Tc_init,'P',Pcool_init,self.coolant)
 
-            P2 = P1 + self.DeltaPstep(z1,Tc_init,P1,mdot_coolant)
+        return self.dP_channel_isothermal(mdot_coolant, rho, mu)
 
-            z1 = z1 + self.dz
+    def dP_channel_isothermal(self, mdot_coolant, rho, mu):
+        '''
+        dP_channel_Approx with the coolant density and viscosity held fixed, vectorized
+        over the channel. The feed solver calls this every residual evaluation; a liquid's
+        properties barely move over the channel pressure drop. Returns P_out - P_in (< 0).
+        '''
 
-            P1 = P2
+        g = getattr(self, '_dp_geom', None)
+        if g is None:
+            z = self.z_array
+            h1 = np.array([self.channelheight(zi) for zi in z], dtype=float)
+            w1 = np.array([self.channelwidth(zi) for zi in z], dtype=float)
+            h2 = np.array([self.channelheight(zi + self.dz) for zi in z], dtype=float)
+            w2 = np.array([self.channelwidth(zi + self.dz) for zi in z], dtype=float)
+            A1, A2 = w1*h1, w2*h2
+            Dh = 4*A1/(2*w1 + 2*h1)
+            a = np.minimum(w1, h1)/np.maximum(w1, h1)
+            fRe = 96*(1 - 1.3553*a + 1.9467*a**2 - 1.7012*a**3 + 0.9564*a**4 - 0.2537*a**5)
+            g = self._dp_geom = (A1, A2, Dh, fRe)
 
-        return P2 - Pcool_init
-    
+        A1, A2, Dh, fRe = g
+        mdotchannel = mdot_coolant/self.numchannels
+        Re = Dh*mdotchannel/(A1*mu)
+        with np.errstate(divide='ignore'):
+            f = np.where(Re < 2300, fRe/np.maximum(Re, 1e-12),
+                         0.25*np.log10(self.epsilon_rough/(3.7*Dh) + 5.74/np.maximum(Re, 1e-12)**0.9)**-2)
+        u1 = mdotchannel/(rho*A1)
+        u2 = mdotchannel/(rho*A2)
+        darcy = -(f/Dh)*(0.5*rho*u1**2)*self.dz
+        area = 0.5*rho*(u1**2 - u2**2)
 
-    def SOLVE_REGEN(self, mdot_coolant, Tcool_init, Pcool_init, Transport_obj):
+        return float(np.sum(darcy + area))
+
+
+    def gas_side(self, Transport_obj):
+        '''
+        Hot-gas quantities along z_array. None of these depend on the coolant state,
+        so they are evaluated once per snapshot and shared by the regen march and the
+        film model.
+        '''
+
+        TempsC, Tstag, PressuresC, RhosC = Transport_obj.TPRhostag()
+        cstar  = Transport_obj.getCstar()
+        Pc     = Transport_obj.Pc
+        Tcomb  = Transport_obj.Tcomb()
+        Cptransport, viscositytransport, condtransport, prantltransport, gammatransport = Transport_obj.Chambertransport()
+        MachFunc = Transport_obj.MachFunction(self.R)
+
+        z = self.z_array
+
+        gas = {'z': z, 'Tcomb': Tcomb}
+        gas['M']     = np.array([MachFunc(z1) for z1 in z])
+        gas['hg']    = np.array([bartz_hg(z1, MachFunc, self.R, 2*self.Rthroat, self.throat_radcurv,
+                                          Pc, cstar, viscositytransport, Cptransport,
+                                          prantltransport, gammatransport, Tcomb, TempsC) for z1 in z])
+        temps        = np.array([TempsC(z1, MachFunc) for z1 in z])
+        gas['Taw']   = temps[:, 0]
+        gas['T0']    = temps[:, 1]
+        gas['cp']    = np.array([float(Cptransport(z1)) for z1 in z])
+        gas['mu']    = np.array([float(viscositytransport(z1)) for z1 in z])
+        gas['k']     = np.array([float(condtransport(z1)) for z1 in z])
+        gas['Pr']    = np.array([float(prantltransport(z1)) for z1 in z])
+        gas['gamma'] = np.array([float(gammatransport(z1)) for z1 in z])
+        gas['P']     = np.array([PressuresC(z1, MachFunc) for z1 in z])
+        gas['rho']   = np.array([RhosC(z1, MachFunc) for z1 in z])
+        gas['T_static'] = gas['T0']/(1 + 0.5*(gas['gamma'] - 1)*gas['M']**2)
+
+        return gas
+
+
+    def SOLVE_REGEN(self, mdot_coolant, Tcool_init, Pcool_init, Transport_obj,
+                    gas=None, film=None, Film_obj=None, T_w_prev=None):
+        '''
+        Marches the coolant from the nozzle exit (z = 0) to the injector.
+
+        gas : Optional precomputed gas_side() arrays.
+        film : Optional wall-side solution from Film_obj.solve():
+            - psi scales the convective coefficient for the gas layer touching the wall
+              (film vapour / near-wall layer, Ievlev's S ratio),
+            - q_rad is the gas radiation absorbed by the wall,
+            - in cells wetted by the liquid film the wall only receives q_rad, weighted
+              by the wetted fraction of the cell.
+            The returned wall heat flux (Qflux_array) is multiplied by self.tbc_scale; the coolant
+            march and returned temperatures are the no-TBC (conservative) state.
+        T_w_prev : Hot-wall temperatures from the previous iteration. When given, the Bartz
+            sigma factor is evaluated at the wall temperature instead of the recovery temperature.
+        '''
+
         T1 = Tcool_init
         P1 = Pcool_init
 
@@ -436,29 +581,43 @@ class Regen_obj:
         Twall_array = np.zeros(numz)
         Qflux_array = np.zeros(numz)
 
-        TempsC, _, _, _ = Transport_obj.TPRhostag()
-        cstar  = Transport_obj.getCstar()
-        Pc     = Transport_obj.Pc
-        Tcomb  = Transport_obj.Tcomb()
-        Cptransport, viscositytransport, _, prantltransport, gammatransport = Transport_obj.Chambertransport()
-        MachFunc = lambda z: Transport_obj.Mach(z, self.R)
+        if gas is None:
+            gas = self.gas_side(Transport_obj)
+
+        from RXPI_CATNAP_Film import bartz_sigma
+
+        wetted = film is not None and film['active']
 
         for i, z1 in enumerate(self.z_array):
             mdotchannel = mdot_coolant / self.numchannels
 
-            hg = bartz_hg(z1, MachFunc, self.R, 2*self.Rthroat, self.throat_radcurv,
-                        Pc, cstar, viscositytransport, Cptransport,
-                        prantltransport, gammatransport, Tcomb, TempsC)
+            hg = gas['hg'][i]
+
+            Taw = gas['Taw'][i]
+
+            if T_w_prev is not None:
+                g = (gas['T0'][i], gas['M'][i], gas['gamma'][i])
+                hg = hg*bartz_sigma(T_w_prev[i], *g)/bartz_sigma(Taw, *g)
+
+            if film is not None:
+                hg = hg*film['psi'][i]
 
             hcDB = DittusB(z1, mdotchannel, T1, P1, self)
-            
+
             Rtotal, Rg, Rwall, Rc = Resistances(z1, hcDB, hg, self.R, self)
 
-            Taw, _ = TempsC(z1, MachFunc)
+            Qr = film['q_rad'][i]*2*pi*self.R(z1)*self.dz if film is not None else 0.0
 
-            Q = (Taw - T1) / Rtotal                      
+            # hot-wall balance: (Taw - Twg)/Rg + Qr = (Twg - T1)/(Rwall + Rc)
+            Rw = Rwall + Rc
+            Twg = (Taw/Rg + T1/Rw + Qr)/(1/Rg + 1/Rw)
+            Q = (Twg - T1)/Rw
 
-            Twall = T1 + Q * (Rwall + Rc)                           
+            if wetted and film['coverage'][i] > 0:
+                phi = film['coverage'][i]
+                Q = phi*film['q_wall'][i]*2*pi*self.R(z1)*self.dz + (1 - phi)*Q
+
+            Twall = T1 + Q * (Rwall + Rc)
 
             Cpcool = CP.PropsSI('CPMASS', 'T', T1, 'P', P1, self.coolant)
             T2 = T1 + Q / (mdot_coolant * Cpcool)
@@ -468,7 +627,10 @@ class Regen_obj:
             Pcool_array[i] = P2
             hg_array[i]    = hg
             Twall_array[i] = Twall
-            Qflux_array[i] = Q / (2 * pi * self.R(z1) * self.dz)  # W/m² (this is approximate based on hotwall area)
+            # TBC: scales only the reported flux of the node (convection + radiation, film-blended).
+            # Uncoupled and conservative: Twall, Tcool and the wall/film fixed point in
+            # SOLVE_SNAPSHOT keep using the no-TBC Q, so the TBC gives no second-order credit.
+            Qflux_array[i] = self.tbc_scale * Q / (2 * pi * self.R(z1) * self.dz)  # W/m² (this is approximate based on hotwall area)
 
             T1 = T2
             P1 = P2

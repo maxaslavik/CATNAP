@@ -230,6 +230,7 @@ header{
     <div class="kpi-cell"><div class="k">Peak hg</div><div class="v purple" id="kr4">—</div></div>
     <div class="kpi-cell"><div class="k">ΔP coolant</div><div class="v green" id="kr5">—</div></div>
     <div class="kpi-cell"><div class="k">ΔT coolant</div><div class="v" id="kr6">—</div></div>
+    <div class="kpi-cell"><div class="k">Film L_c</div><div class="v red" id="kr7">—</div></div>
   </div>
   <div class="row cols-2">
     <div class="card"><div class="card-head"><span class="title">Wall &amp; Coolant Temperature</span><span class="unit">K</span></div><div class="pbox h300" id="r-TC"></div></div>
@@ -296,6 +297,7 @@ header{
             <option value="hg_3d">Bartz hg (W/m²K)</option>
             <option value="Tcool_3d">Coolant temperature (K)</option>
             <option value="Pcool_3d">Coolant pressure (MPa)</option>
+            <option value="filmcov_3d">Liquid film coverage (-)</option>
           </select>
         </span>
       </div>
@@ -579,6 +581,14 @@ function drawRegen() {
   document.getElementById('kr5').textContent = ((Pc2[0]-Pc2[Pc2.length-1])*1000).toFixed(1)+' kPa';
   document.getElementById('kr6').textContent = (mx(Tc)-mn(Tc)).toFixed(1)+' K';
 
+  /* Liquid film (Shine model): shade the wetted wall [z_dry, z_end] */
+  var F = (D.film && D.film[i]) ? D.film[i] : null, filmShapes = [];
+  document.getElementById('kr7').textContent = (F && F.active) ? (100*F.Lc).toFixed(2)+' cm' : 'off';
+  if (F && F.active) {
+    filmShapes = [{type:'rect', xref:'x', yref:'paper', x0:F.z_dry, x1:z[z.length-1], y0:0, y1:1,
+                   fillcolor:'rgba(96,165,250,0.12)', line:{width:0}, layer:'below'}];
+  }
+
   /* Header peak stats */
   var allTw=[].concat.apply([],D.Twall_3d), allQf=[].concat.apply([],D.Qflux_3d);
   document.getElementById('hs-twall').textContent = Math.round(Math.max.apply(null,allTw))+' K';
@@ -591,7 +601,7 @@ function drawRegen() {
     tr(z, D.Twall_3d[i], 'T_wall (K)', '#f87171'),
     tr(z, D.Tcool_3d[i], 'T_cool (K)', '#60a5fa', 'y2', 'dash'),
   ], lay({
-    xaxis: axZ,
+    xaxis: axZ, shapes: filmShapes,
     yaxis: {title:{text:'T_wall (K)'},  gridcolor:GRID, tickfont:{color:MUTED,family:CFONT,size:10}},
     yaxis2:{title:{text:'T_cool (K)'}, overlaying:'y', side:'right', gridcolor:'transparent', tickfont:{color:MUTED,family:CFONT,size:10}},
   }));
@@ -601,7 +611,7 @@ function drawRegen() {
     tr(z, D.Qflux_3d[i], 'q\u2033 (MW/m\u00b2)', '#ff6b35'),
     tr(z, D.hg_3d[i],    'hg (W/m\u00b2K)',       '#a78bfa', 'y2', 'dash'),
   ], lay({
-    xaxis: axZ,
+    xaxis: axZ, shapes: filmShapes,
     yaxis: {title:{text:'q\u2033 (MW/m\u00b2)'}, gridcolor:GRID, tickfont:{color:MUTED,family:CFONT,size:10}},
     yaxis2:{title:{text:'hg (W/m\u00b2K)'},       overlaying:'y', side:'right', gridcolor:'transparent', tickfont:{color:MUTED,family:CFONT,size:10}},
   }));
@@ -732,7 +742,7 @@ var SUNSET_SCALE = [
 ];
 var CMAP_NAMES = {
   Qflux_3d:'q\u2033 (MW/m\u00b2)', Twall_3d:'T_wall (K)',
-  hg_3d:'hg (W/m\u00b2K)', Tcool_3d:'T_cool (K)', Pcool_3d:'P_cool (MPa)'
+  hg_3d:'hg (W/m\u00b2K)', Tcool_3d:'T_cool (K)', Pcool_3d:'P_cool (MPa)', filmcov_3d:'Film coverage (-)'
 };
 
 function drawContour() {

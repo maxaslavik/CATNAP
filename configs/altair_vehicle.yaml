@@ -1,0 +1,75 @@
+# CATNAP vehicle file: hardware definition.
+# Throat/exit diameter, expansion ratio and chamber radius are derived from the contour.
+kind: catnap-vehicle
+version: 1
+name: Altair
+
+propellants:
+  oxidizer_cea: N2O          # RocketCEA names
+  fuel_cea: ETHANOL
+  oxidizer_coolprop: N2O     # CoolProp names
+  fuel_coolprop: ETHANOL
+
+# Altair, RPA conical-nozzle geometry: Dc 106.67, Dt 52.07, De 114.55 mm, R1 39.05, R2 82.37 mm,
+# Te 15 deg, L* 740 mm. Arcs meet tangentially at 39.2 deg (no straight cone or Rn arc in this
+# contour), and the cylinder length keeps L* = 740 mm.
+contour:                     # inches, matches NX CAD; z = 0 at the nozzle exit
+  nozzle_length_in: 4.5901
+  arc1_length_in: 0.9713     # throat-side converging arc
+  arc2_length_in: 2.0488     # chamber-side converging arc
+  chamber_length_in: 5.0123
+  exit_radius_in: 2.2549
+  arc1_radius_in: 1.5374     # R1 = 39.05 mm
+  arc2_radius_in: 3.2429     # R2 = 82.37 mm
+  divergence_angle_deg: 15.0
+  throat_curvature_radius_mm: 24.5   # Bartz r_c, mean of R1 and Rn = 9.95 mm
+
+injector:
+  ox_holes: 25
+  ox_diameter_mm: 2.533
+  ox_cd: 0.55
+  fuel_holes: 20
+  fuel_diameter_mm: 1.24
+  fuel_cd: 0.65
+  film_holes: 20             # film is fed from the regen outlet manifold
+  film_diameter_mm: 0.48
+  film_cd: 0.65
+
+valves:
+  ox_cv: 24.0
+  fuel_cv: 12.0
+
+# Feed lines, AN/JIC tube (dash = OD in 1/16 in), Darcy-Weisbach. PLACEHOLDER sizes and lengths.
+# Ox: tank -> main valve -> line -> injector. Fuel: tank -> piston -> main valve -> line ->
+# regen inlet (nozzle exit) -> channels -> injector + film.
+lines:
+  ox_dash: 12
+  ox_wall_in: 0.049
+  ox_length_in: 36.0
+  ox_minor_loss_K: 0.0       # fittings and bends, sum of K
+  fuel_dash: 8
+  fuel_wall_in: 0.035
+  fuel_length_in: 36.0
+  fuel_minor_loss_K: 0.0
+  roughness_um: 1.5          # drawn stainless tube
+
+regen:
+  wall_thickness_mm: 1.5
+  channel_height_mm: 1.0
+  min_channel_width_mm: 1.5  # at the throat
+  channels: 90
+  wall_conductivity_W_mK: 237.0
+  roughness_um: 15.0
+  generatrix_angle_deg: 35.0
+  gas_radiation: true
+  wall_emissivity: 0.8       # hot wall (RPA table 1: oxidized copper 0.57-0.87)
+  gas_emissivity: null       # null -> Leckner H2O/CO2 correlation
+
+film:                        # RPA liquid film (heating + vaporization) + Ievlev near-wall layer mixing
+  enabled: true
+  mixing_coefficient: 0.001  # K_t, RPA range (0.05...0.20)e-2
+  near_wall_mass_fraction: 0.1   # relative mass flow of the layer the film vapour mixes into
+  near_wall_OF: null         # null -> core mixture ratio
+
+tbc:                         # PDMS fuel additive, thermal barrier coating
+  pdms_mass_fraction_pct: 0.0  # % of fuel mass; wall heat flux x (1 - 0.08 x value), 0-10 %
