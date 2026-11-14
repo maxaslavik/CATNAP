@@ -1,0 +1,22 @@
+[project]
+name = "catnap"
+version = "0.1.0"
+description = "Coupled Adiabatic Tank and Nozzle Analysis Program - a multiphase flow and regenerative cooling solver for dual-acting vapor pressurized propulsion systems."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Maximilian Slavik" }]
+requires-python = ">=3.11"
+dependencies = [
+    "coolprop>=7.2.0",
+    "matplotlib>=3.10.8",
+    "numba>=0.64.0",
+    "numpy>=2.4.3",
+    "rocketcea>=1.2.3",
+    "scipy>=1.17.1",
+]
+
+[tool.uv]
+# CATNAP is a set of top-level scripts, not an installable package,
+# so uv only manages the environment and does not try to build/install it.
+package = false
